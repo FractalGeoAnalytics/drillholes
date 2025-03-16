@@ -56,7 +56,7 @@ class IntervalData:
         column_set = self.data.columns.isin(["depthfrom", "depthto"])
         if sum(column_set) != 2:
             column_names = ",".join(self.data.columns.to_list())
-            err = "interval data must contain columns from and to these are the columns provided {}".format(
+            err = "interval data must contain columns depthfrom and depthto these are the columns provided {}".format(
                 column_names
             )
             raise ValueError(err)
@@ -76,8 +76,6 @@ class IntervalData:
 
         if (self.composite_column != "") & self.composite_consecutive:
             self = self._composite_consecutive(self.composite_column)
-        self.depthfrom = self.data.depthfrom
-        self.depthto = self.data.depthto
 
     def _composite_consecutive(self, column):
         """
