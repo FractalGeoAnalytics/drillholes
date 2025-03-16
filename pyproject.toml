@@ -4,5 +4,12 @@ version = "0.0.1"
 dependencies = [
     "pandas",
     'importlib-metadata; python_version<"3.10"',
-    "numpy"
+    "numpy",
+    "wellpathpy",
+    "tqdm",
+    "dhcomp"
 ]
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+dev-dependencies = ["black"]
