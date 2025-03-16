@@ -40,7 +40,7 @@ class IntervalData:
     """
     interval data requires a from and to depth
     has options to simplify the categorica data and concatentate repeat samples
-    if you need to generate stratigraphic intercepts you must concatentate 
+    if you need to generate stratigraphic intercepts you must concatentate
     repeat samples
     """
 
@@ -48,16 +48,22 @@ class IntervalData:
     composite_column: str = ""
     composite_consecutive: bool = True
     column_map: Union[None, dict[dict[str:Any]]] = None
+    extra_validation_columns: Union[list[str], None] = None
 
     def __post_init__(self):
         """
-        check if we have columns called depthfrom, depthto
+        check various parameters and run other data creation steps
         """
-        column_set = self.data.columns.isin(["depthfrom", "depthto"])
-        if sum(column_set) != 2:
+        # check if we have columns called depthfrom, depthto and anything else that we ask for
+        validation_columns = ["depthfrom", "depthto"]
+        if self.extra_validation_columns is not None:
+            validation_columns.extend(self.extra_validation_columns)
+        column_set = self.data.columns.isin(validation_columns)
+        if sum(column_set) != len(validation_columns):
             column_names = ",".join(self.data.columns.to_list())
-            err = "interval data must contain columns depthfrom and depthto these are the columns provided {}".format(
-                column_names
+            valnames= ','.join(validation_columns)
+            err = "interval data must contain columns {} these are the columns provided {}".format(
+                valnames, column_names
             )
             raise ValueError(err)
         # check that the depth to is > than the from
