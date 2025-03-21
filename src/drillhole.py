@@ -10,98 +10,111 @@ DFNone = Union[pd.DataFrame, None]
 from tqdm import tqdm
 
 
-@dataclass
-class PointData:
+class PointData(pd.DataFrame):
     """
-    point data only has a depth
+    PointData subclasses a DataFrame and adds simple compositing
+
     """
 
-    data: pd.DataFrame
+    def __init__(self, *args, **kwargs):
 
-    def __post_init__(self):
-        """
-        check if we have a depth column
-        """
-        column_set = self.data.columns.isin(["depth"])
-        if sum(column_set) != 1:
-            column_names = ",".join(self.data.columns.to_list())
-            err = "point data must a column 'depth' these are the columns provided {}".format(
-                column_names
+        # surely there is a better way to add additional kwargs
+        if "extra_validation_columns" in kwargs:
+            extra_validation_columns = kwargs.pop("extra_validation_columns")
+        else:
+            extra_validation_columns = None
+        super().__init__(*args, **kwargs)
+        validation_columns = ["depth"]
+
+        if extra_validation_columns is not None:
+            if isinstance(extra_validation_columns, list):
+                validation_columns.extend(extra_validation_columns)
+            else:
+                raise TypeError("extra_validation_columns must be a list")
+        column_set = self.columns.isin(validation_columns)
+        if sum(column_set) != len(validation_columns):
+            column_names = ",".join(self.columns.to_list())
+            valnames = ",".join(validation_columns)
+            err = "point data must contain columns {} these are the columns provided {}".format(
+                valnames, column_names
             )
             raise ValueError(err)
-        # check that the depth to is > than the from
-        idx_start_greater_than_end = self.data.depthfrom >= self.data.depthto
-        if any(idx_start_greater_than_end):
-            print("Some intervals have lengths <= 0")
 
 
-@dataclass
-class IntervalData:
+class IntervalData(pd.DataFrame):
     """
     interval data requires a from and to depth
-    has options to simplify the categorica data and concatentate repeat samples
+    has options to simplify the categorical data and concatentate repeat samples
     if you need to generate stratigraphic intercepts you must concatentate
     repeat samples
     """
 
-    data: pd.DataFrame
-    composite_column: str = ""
-    composite_consecutive: bool = True
-    column_map: Union[None, dict[dict[str:Any]]] = None
-    extra_validation_columns: Union[list[str], None] = None
 
-    def __post_init__(self):
+    def __arg_popper(self,kewargs, name, default):
         """
-        check various parameters and run other data creation steps
+        pops out the arguments from kwargs
         """
+        # surely there is a better way to add additional kwargs
+        if name in kewargs:
+            outarg = kewargs.pop(name)
+        else:
+            outarg = default
+
+        return outarg
+
+    def __init__(self, *args, **kwargs):
+
+        # surely there is a better way to add additional kwargs
+        extra_validation_columns = self.__arg_popper(kwargs, 'extra_validation_columns',None)
+        column_map = self.__arg_popper(kwargs, 'column_map',None)
+        composite_column = self.__arg_popper(kwargs, 'composite_column',"")
+        composite_consecutive = self.__arg_popper(kwargs, 'composite_consecutive',True)
+
+        super().__init__(*args, **kwargs)
         # check if we have columns called depthfrom, depthto and anything else that we ask for
         validation_columns = ["depthfrom", "depthto"]
-        if self.extra_validation_columns is not None:
-            validation_columns.extend(self.extra_validation_columns)
-        column_set = self.data.columns.isin(validation_columns)
+
+        if extra_validation_columns is not None:
+            if isinstance(extra_validation_columns, list):
+                validation_columns.extend(extra_validation_columns)
+            else:
+                raise TypeError("extra_validation_columns must be a list")
+        column_set = self.columns.isin(validation_columns)
         if sum(column_set) != len(validation_columns):
-            column_names = ",".join(self.data.columns.to_list())
-            valnames= ','.join(validation_columns)
+            column_names = ",".join(self.columns.to_list())
+            valnames = ",".join(validation_columns)
             err = "interval data must contain columns {} these are the columns provided {}".format(
                 valnames, column_names
             )
             raise ValueError(err)
         # check that the depth to is > than the from
-        idx_start_greater_than_end = self.data.depthfrom >= self.data.depthto
+        idx_start_greater_than_end = self.depthfrom >= self.depthto
         if any(idx_start_greater_than_end):
-            print("Some intervals have lengths <= 0")
-
+            raise ValueError("Some intervals have lengths <= 0")
         # simplify the columns i.e. rename geologging or stratigraphy to larger groups
         # we need to call this before the compositing of consecutive samples otherwise
         # we end up having multiple repeat samples
-        if self.column_map is not None:
-            self = self._simplify(self.column_map)
-        # composite consecutive samples that have the same value
-        if self.composite_column == "":
-            self.composite_consecutive = False
+        if column_map is not None:
+            self = self._simplify(column_map)
 
-        if (self.composite_column != "") & self.composite_consecutive:
-            self = self._composite_consecutive(self.composite_column)
-
-    def _composite_consecutive(self, column):
+    def composite_consecutive(self, column):
         """
         aggreagates consecutive intervals with the same
-        value into a single interval using the column selec`ted by column
+        value into a single interval using the column selected by column
         """
-        if isinstance(self.data, pd.DataFrame):
-            if self.data.shape[0] > 1:
-                cond = (self.data[column] != self.data[column].shift()).cumsum()
-                tmp_agg = self.data.groupby(cond).agg(
-                    fr=("depthfrom", "min"),
-                    to=("depthto", "max"),
-                    strat=(column, "first"),
-                )
-                print(tmp_agg)
-                tmp_agg.rename(columns={"fr": "from", "to": "depthto"}, inplace=True)
-                tmp_agg.reset_index(drop=True, inplace=True)
-                self.data = tmp_agg
+        if self.shape[0] > 1:
+            cond = (self[column] != self[column].shift()).cumsum()
+            tmp_agg = self.groupby(cond).agg(
+                fr=("depthfrom", "min"),
+                to=("depthto", "max"),
+                strat=(column, "first"),
+            ).copy()
+            tmp_agg.rename(
+                columns={"fr": "depthfrom", "depthto": "depthto"}, inplace=True
+            )
+            tmp_agg.reset_index(drop=True, inplace=True)
 
-        return self
+        return tmp_agg
 
     def _simplify(self, column_map):
         """
@@ -114,22 +127,10 @@ class IntervalData:
 
         """
 
-        self.data.replace(to_replace=column_map, inplace=True)
+        self.replace(to_replace=column_map, inplace=True)
 
         return self
 
-    def __repr__(self):
-        ncomps: int = len(self.depthfrom)
-        out: str
-        if ncomps > 0:
-            start: float = self.depthto.max()
-            stop: float = self.depthfrom.min()
-            out = "{} samples start depth {:.2f} end depth {:.2f}".format(
-                ncomps, start, stop
-            )
-        else:
-            out = ""
-        return out
 
 
 @dataclass
@@ -286,25 +287,11 @@ class Drillhole:
         """
         if isinstance(self.survey, pd.DataFrame):
             # survey columns
-            column_set = self.survey.columns.isin(["depth", "inclination", "azimuth"])
-            if sum(column_set) != 3:
-                column_names = ",".join(self.survey.columns.to_list())
-                err = "survey columns must only have depth, inclination and azimuth these are column names provided {}".format(
-                    column_names
-                )
-                raise ValueError(err)
-            else:
+            self.survey = PointData(
+                self.survey, extra_validation_columns=["inclination", "azimuth"]
+            )
 
-                self._validate_dipazi(self.survey.inclination, self.survey.azimuth)
-
-    def _composite():
-        """
-        code that composites:
-        composites assays to regular intervals of stratigraphy
-        composites geophysics to assay intervals
-
-        """
-        pass
+            self._validate_dipazi(self.survey.inclination, self.survey.azimuth)
 
     def _check_stratigraphy(self):
         """
@@ -317,10 +304,10 @@ class Drillhole:
             if self.strat.shape[0] > 1:
                 cond = (self.strat.strat != self.strat.strat.shift()).cumsum()
                 tmp_agg = self.strat.groupby(cond).agg(
-                    fr=("from", min), to=("to", max), strat=("strat", "first")
+                    fr=("depthfrom", min), to=("depthto", max), strat=("strat", "first")
                 )
                 tmp_agg.insert(0, "holeid", self.strat.strat.values[0])
-                tmp_agg.rename(columns={"fr": "from"}, inplace=True)
+                tmp_agg.rename(columns={"fr": "depthfrom"}, inplace=True)
                 tmp_agg.reset_index(drop=True, inplace=True)
                 self.strat = tmp_agg
 
@@ -347,7 +334,7 @@ class Drillhole:
         """
 
     def _calculate_inside(self):
-        val = self._mid_point(self.strat["from"], self.strat["to"]).values
+        val = self._mid_point(self.strat["depthfrom"], self.strat["depthto"]).values
         strat = self.strat["strat"].values
         n_items = len(val)
         if n_items > 1:
@@ -360,8 +347,8 @@ class Drillhole:
             index=index,
         )
         # include the from and to to estimate thickness
-        tmp["from"] = self.strat["from"].values
-        tmp["to"] = self.strat["to"].values
+        tmp["depthfrom"] = self.strat["depthfrom"].values
+        tmp["depthto"] = self.strat["depthto"].values
         self._inside = tmp
         return self
 
@@ -373,12 +360,12 @@ class Drillhole:
         if isinstance(self.strat, pd.DataFrame):
             self = self._calculate_inside()
             # we are looking for the bottoms but this doesn't include the last interval or the first
-            tmp_b = self.strat[["to", "strat"]][:-1].copy().reset_index(drop=True)
-            tmp_b = tmp_b.rename(columns={"to": "depth"})
+            tmp_b = self.strat[["depthto", "strat"]][:-1].copy().reset_index(drop=True)
+            tmp_b = tmp_b.rename(columns={"depthto": "depth"})
             tmp_b["type"] = "bottom"
             # get the tops of the other units
-            tmp_t = self.strat[["from", "strat"]][1:].copy().reset_index(drop=True)
-            tmp_t = tmp_t.rename(columns={"from": "depth"})
+            tmp_t = self.strat[["depthfrom", "strat"]][1:].copy().reset_index(drop=True)
+            tmp_t = tmp_t.rename(columns={"depthfrom": "depth"})
             tmp_t["type"] = "top"
             # copy the bottom and create a new table tmp_c aka contacts
             tmp_c = tmp_b.copy()
@@ -403,8 +390,8 @@ class Drillhole:
         creates the vtk drillhole datasets
         """
 
-        fx, fy, fz = self._interp_survey_depth(self.strat["from"])
-        tx, ty, tz = self._interp_survey_depth(self.strat["to"])
+        fx, fy, fz = self._interp_survey_depth(self.strat["depthfrom"])
+        tx, ty, tz = self._interp_survey_depth(self.strat["depthto"])
         f = np.vstack((fx, fy, fz)).T
         t = np.vstack((tx, ty, tz)).T
         xyz = np.hstack([f, t]).reshape(-1, 3)
@@ -457,16 +444,7 @@ class Drillhole:
         ensure that the assay dataframe contains from and to columns
         """
         if isinstance(self.assay, pd.DataFrame):
-            # survey columns
-            column_set = self.assay.columns.isin(["depthfrom", "depthto"])
-            if sum(column_set) != 2:
-                column_names = ",".join(self.assay.columns.to_list())
-                err = "assays must contain columns from and to these are the columns provided {}".format(
-                    column_names
-                )
-                raise ValueError(err)
-            else:
-                pass
+            self.assay = IntervalData(self.assay)
 
     def _desurvey_assays(self):
         """

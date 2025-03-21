@@ -12,4 +12,6 @@ dependencies = [
 [build-system]
 requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
-dev-dependencies = ["black"]
+
+[project.optional-dependencies]
+dev = ["black","coverage"]
