@@ -1,7 +1,7 @@
 import unittest
 
 from src.drillhole import Drillhole
-from src.drillhole import Drillhole, IntervalData
+from src.drillhole import Drillhole, IntervalData,PointData
 import pandas as pd
 import numpy as np
 
@@ -19,8 +19,8 @@ class TestIntervalData(unittest.TestCase):
         )
         self.simplify = {"A": {1: 9, 2: -1}, "B": {"a": "A"}}
 
-    def test_IntervalData(self):
-        d = IntervalData(self.test, composite_column="A")
+    def test_Create(self):
+        d = IntervalData(self.test)
 
     def test_IntervalSimplify(self):
         d = IntervalData(self.test, column_map=self.simplify)
@@ -51,7 +51,38 @@ class TestIntervalData(unittest.TestCase):
     def test_NameExtraColumnsFail(self):
         tmp = self.test.copy()
         with self.assertRaises(ValueError):
-            IntervalData(tmp, extra_validation_columns=["B"])
+            IntervalData(tmp, extra_validation_columns=["Z"])
+
+
+class TestPointData(unittest.TestCase):
+
+    def setUp(self):
+        self.test = pd.DataFrame(
+            {
+                "depth": [0, 1, 2, 3, 4],
+                "A": [1, 1, 2, 3, 1],
+                "B": ["a", "b", "c", "d", "e"],
+            }
+        )
+
+    def test_Create(self):
+        d = PointData(self.test)
+
+    def test_NameFailureDepth(self):
+        "check that we can find the wrong columns"
+        tmp = self.test.copy()
+        tmp.rename(columns={"depth": "worgn"}, inplace=True)
+        with self.assertRaises(ValueError):
+            PointData(tmp)
+
+    def test_NameExtraColumns(self):
+        tmp = self.test.copy()
+        PointData(tmp, extra_validation_columns=["A"])
+
+    def test_NameExtraColumnsFail(self):
+        tmp = self.test.copy()
+        with self.assertRaises(ValueError):
+            PointData(tmp, extra_validation_columns=["Z"])
 
 
 class TestDrillhole(unittest.TestCase):
