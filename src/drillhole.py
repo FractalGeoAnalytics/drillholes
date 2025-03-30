@@ -5,132 +5,10 @@ import wellpathpy as wp
 from dataclasses import dataclass, field
 from typing import Union, Literal, Any
 from datetime import datetime
+from geodata import PointData, IntervalData
 
 DFNone = Union[pd.DataFrame, None]
 from tqdm import tqdm
-
-
-class PointData(pd.DataFrame):
-    """
-    PointData subclasses a DataFrame and adds simple compositing
-
-    """
-
-    def __init__(self, *args, **kwargs):
-
-        # surely there is a better way to add additional kwargs
-        if "extra_validation_columns" in kwargs:
-            extra_validation_columns = kwargs.pop("extra_validation_columns")
-        else:
-            extra_validation_columns = None
-        super().__init__(*args, **kwargs)
-        validation_columns = ["depth"]
-
-        if extra_validation_columns is not None:
-            if isinstance(extra_validation_columns, list):
-                validation_columns.extend(extra_validation_columns)
-            else:
-                raise TypeError("extra_validation_columns must be a list")
-        column_set = self.columns.isin(validation_columns)
-        if sum(column_set) != len(validation_columns):
-            column_names = ",".join(self.columns.to_list())
-            valnames = ",".join(validation_columns)
-            err = "point data must contain columns {} these are the columns provided {}".format(
-                valnames, column_names
-            )
-            raise ValueError(err)
-
-
-class IntervalData(pd.DataFrame):
-    """
-    interval data requires a from and to depth
-    has options to simplify the categorical data and concatentate repeat samples
-    if you need to generate stratigraphic intercepts you must concatentate
-    repeat samples
-    """
-
-
-    def __arg_popper(self,kewargs, name, default):
-        """
-        pops out the arguments from kwargs
-        """
-        # surely there is a better way to add additional kwargs
-        if name in kewargs:
-            outarg = kewargs.pop(name)
-        else:
-            outarg = default
-
-        return outarg
-
-    def __init__(self, *args, **kwargs):
-
-        # surely there is a better way to add additional kwargs
-        extra_validation_columns = self.__arg_popper(kwargs, 'extra_validation_columns',None)
-        column_map = self.__arg_popper(kwargs, 'column_map',None)
-        composite_column = self.__arg_popper(kwargs, 'composite_column',"")
-        composite_consecutive = self.__arg_popper(kwargs, 'composite_consecutive',True)
-
-        super().__init__(*args, **kwargs)
-        # check if we have columns called depthfrom, depthto and anything else that we ask for
-        validation_columns = ["depthfrom", "depthto"]
-
-        if extra_validation_columns is not None:
-            if isinstance(extra_validation_columns, list):
-                validation_columns.extend(extra_validation_columns)
-            else:
-                raise TypeError("extra_validation_columns must be a list")
-        column_set = self.columns.isin(validation_columns)
-        if sum(column_set) != len(validation_columns):
-            column_names = ",".join(self.columns.to_list())
-            valnames = ",".join(validation_columns)
-            err = "interval data must contain columns {} these are the columns provided {}".format(
-                valnames, column_names
-            )
-            raise ValueError(err)
-        # check that the depth to is > than the from
-        idx_start_greater_than_end = self.depthfrom >= self.depthto
-        if any(idx_start_greater_than_end):
-            raise ValueError("Some intervals have lengths <= 0")
-        # simplify the columns i.e. rename geologging or stratigraphy to larger groups
-        # we need to call this before the compositing of consecutive samples otherwise
-        # we end up having multiple repeat samples
-        if column_map is not None:
-            self = self._simplify(column_map)
-
-    def composite_consecutive(self, column):
-        """
-        aggreagates consecutive intervals with the same
-        value into a single interval using the column selected by column
-        """
-        if self.shape[0] > 1:
-            cond = (self[column] != self[column].shift()).cumsum()
-            tmp_agg = self.groupby(cond).agg(
-                fr=("depthfrom", "min"),
-                to=("depthto", "max"),
-                strat=(column, "first"),
-            ).copy()
-            tmp_agg.rename(
-                columns={"fr": "depthfrom", "depthto": "depthto"}, inplace=True
-            )
-            tmp_agg.reset_index(drop=True, inplace=True)
-
-        return tmp_agg
-
-    def _simplify(self, column_map):
-        """
-        simplifies the columns provided using a dict of dicts
-        dict[str:dict[str, str]]
-
-        effectively just wraps pd.DataFrame().replace
-
-        https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.replace.html
-
-        """
-
-        self.replace(to_replace=column_map, inplace=True)
-
-        return self
-
 
 
 @dataclass
@@ -202,6 +80,7 @@ class Drillhole:
     assay: DFNone = None
     geology: DFNone = None
     strat: DFNone = None
+    strat_simplify: Union[dict[str, dict[str, Any]], None] = None
     geophysics: DFNone = None
     watertable: Union[float, None] = None
     display_resolution: float = 0.1
@@ -222,7 +101,7 @@ class Drillhole:
         if a survey exists that is preferred
         """
         tangent_mapper: dict[str] = {
-            "average_tangent": "ave",
+            "average_tangent": "avg",
             "balanced_tangent": "bal",
             "high_tangent": "high",
             "low_tangent": "low",
@@ -257,16 +136,17 @@ class Drillhole:
             desurvey = wp.deviation(
                 self.survey_depth, [self.inclination] * 2, [self.azimuth] * 2
             )
-        if self.desurvey_method == "mininum_curvature":
-            tmp = desurvey.minimum_curvature()
-        elif self.desurvey_method == "radius_curvature":
-            tmp = desurvey.radius_curvature()
-        elif self.desurvey_method in (
+        tangent_options: tuple[str] = (
             "average_tangent",
             "balanced_tangent",
             "high_tangent",
             "low_tangent",
-        ):
+        )
+        if self.desurvey_method == "mininum_curvature":
+            tmp = desurvey.minimum_curvature()
+        elif self.desurvey_method == "radius_curvature":
+            tmp = desurvey.radius_curvature()
+        elif self.desurvey_method in tangent_options:
             tmp = desurvey.tan_method(tangent_mapper[self.desurvey_method])
         depth = tmp.depth
         east = tmp.easting
@@ -302,15 +182,10 @@ class Drillhole:
         """
         if isinstance(self.strat, pd.DataFrame):
             if self.strat.shape[0] > 1:
-                cond = (self.strat.strat != self.strat.strat.shift()).cumsum()
-                tmp_agg = self.strat.groupby(cond).agg(
-                    fr=("depthfrom", min), to=("depthto", max), strat=("strat", "first")
-                )
-                tmp_agg.insert(0, "holeid", self.strat.strat.values[0])
-                tmp_agg.rename(columns={"fr": "depthfrom"}, inplace=True)
-                tmp_agg.reset_index(drop=True, inplace=True)
-                self.strat = tmp_agg
-
+                tmpstrat = IntervalData(
+                    self.strat, extra_validation_columns=["strat"]
+                ).composite_consecutive(column="strat")
+                self.strat = tmpstrat
         return self
 
     def _create_scalar_field(self):
@@ -334,7 +209,8 @@ class Drillhole:
         """
 
     def _calculate_inside(self):
-        val = self._mid_point(self.strat["depthfrom"], self.strat["depthto"]).values
+        val = self.strat.mid_point
+        # val = self._mid_point(self.strat["depthfrom"], self.strat["depthto"]).values
         strat = self.strat["strat"].values
         n_items = len(val)
         if n_items > 1:
@@ -342,7 +218,7 @@ class Drillhole:
         else:
             index = [0]
 
-        tmp = pd.DataFrame(
+        tmp = PointData(
             {"depth": val, "strat": strat, "val": val, "type": ["inside"] * n_items},
             index=index,
         )
@@ -355,9 +231,10 @@ class Drillhole:
     def _create_contacts(self):
         """
         creates a dataframe suitable for conversion to loop3d/gempy modelling
+        extracts the formation tops for geological modelling
         """
 
-        if isinstance(self.strat, pd.DataFrame):
+        if isinstance(self.strat, IntervalData):
             self = self._calculate_inside()
             # we are looking for the bottoms but this doesn't include the last interval or the first
             tmp_b = self.strat[["depthto", "strat"]][:-1].copy().reset_index(drop=True)
@@ -424,21 +301,6 @@ class Drillhole:
             self.contacts = out
         return self
 
-    def _check_overlap(self, x):
-        """
-        ensures that intervals don't overlap if it does throw a warning
-        """
-        x.TO - x.FROM
-
-        pass
-
-    def _mid_point(self, depthfrom, depthto):
-        """
-        calculates the mid point
-        """
-        mids = depthfrom + (depthto - depthfrom) / 2
-        return mids
-
     def _check_assay(self):
         """
         ensure that the assay dataframe contains from and to columns
@@ -450,11 +312,8 @@ class Drillhole:
         """
         desurveys the assays to xyz
         """
-        if isinstance(self.assay, pd.DataFrame):
-            samp_len: np.ndarray = (
-                self.assay.depthto.values - self.assay.depthfrom.values
-            )
-            mids: np.ndarray = self.assay.depthfrom.values + samp_len / 2
+        if isinstance(self.assay, IntervalData):
+            mids: np.ndarray = self.assay.midpoint
             x: np.ndarray = np.interp(mids, self.survey_depth, self.x)
             y: np.ndarray = np.interp(mids, self.survey_depth, self.y)
             z: np.ndarray = np.interp(mids, self.survey_depth, self.z)
@@ -465,9 +324,9 @@ class Drillhole:
 
     def _check_geophysics(self):
         """
-        some checks for geophysics assume that
+        only currently converts from point to interval data
         """
-        pass
+        self.geophysics = self.geophysics.to_interval()
 
     def _dip_check(self, dip):
         """
@@ -529,7 +388,20 @@ class Drillhole:
         # magic number for vertical holes
         self.__magic_dip = 179.9999999
         # deep copy any dataframes that are used to prevent changes propagating.
-        for i in ["survey", "assay", "geology", "strat", "geophysics", "watertable"]:
+        # check hole depth
+        if self.depth <= 0:
+            raise ValueError("Hole Depth must be >0")
+        # need to do data type conversion here to simplify
+        # the processing later on
+        type_map = {
+            "survey": PointData,
+            "assay": IntervalData,
+            "geology": IntervalData,
+            "strat": IntervalData,
+            "geophysics": PointData,
+            "watertable": PointData,
+        }
+        for i in type_map:
             tmp = getattr(self, i)
             if isinstance(tmp, pd.DataFrame):
                 # good idea to reset index too
@@ -538,9 +410,9 @@ class Drillhole:
                 if new.empty:
                     setattr(self, i, None)
                 else:
-                    setattr(self, i, new)
+                    setattr(self, i, type_map[i](new))
         # check that the inputs types are acceptable
-        python_basetypes = [
+        python_basetypes: list[str] = [
             "bhid",
             "depth",
             "inclination",
@@ -555,6 +427,7 @@ class Drillhole:
             tmp = self.__convert_pd_to_pythontypes(getattr(self, i), i)
             setattr(self, i, tmp)
         # check dip and azi
+        self._validate_dipazi(self.inclination, self.azimuth)
         if self.positive_down:
             self.inclination = 90 + self.inclination
             if isinstance(self.survey, pd.DataFrame):
@@ -564,7 +437,6 @@ class Drillhole:
         if isinstance(self.survey, pd.DataFrame):
             self.inclination = self._dip_check(self.survey.inclination)
 
-        self._validate_dipazi(self.inclination, self.azimuth)
         self._check_survey()
         self._desurvey()
         self._check_assay()
@@ -573,9 +445,7 @@ class Drillhole:
         self._check_stratigraphy()
         self._create_contacts()
         self._desurvey_strat()
-        # check hole depth
-        if self.depth <= 0:
-            raise ValueError("Hole Depth must be >0")
+
         return self
 
     def __repr__(self):
@@ -643,13 +513,25 @@ class DrillData:
         self.drillholes = drillholes
 
     def to_vtk():
+        """
+        creates a vtk multiblock dataset
+        """
         pass
 
     def to_csv():
+        """
+        creates a single .csv file with composited intervals
+        """
         pass
 
     def to_loop():
+        """
+        loop data
+        """
         pass
 
     def to_gempy():
+        """
+        gempy data
+        """
         pass
