@@ -3,7 +3,8 @@ from src.drillhole import Drillhole
 
 import pandas as pd
 import numpy as np
-
+from itertools import combinations
+from functools import partial
 
 class TestDrillhole(unittest.TestCase):
 
@@ -19,6 +20,10 @@ class TestDrillhole(unittest.TestCase):
             {"depthfrom": [0, 9], "depthto": [9, 10], "strat": ["a", "b"]}
         )
 
+        self.geophys = pd.DataFrame({"depth": [0, 1, 2], "geophys": [1, 2, 3]})
+
+        self.geology = pd.DataFrame({"depthfrom": [0, 1, 2],"depthto": [1, 2, 3], "geology": [1, 2, 3]})
+        self.watertable = 10
         self.desurvey_method: list[str] = [
             "mininum_curvature",
             "radius_curvature",
@@ -27,7 +32,25 @@ class TestDrillhole(unittest.TestCase):
             "high_tangent",
             "low_tangent",
         ]
-    def test_MakeDrillhole(self):
+
+    def test_MakeDrillholeDataFrameInputsPermuter(self):
+
+        # combinations and permutations of input data frames
+        input_parameters = ['geophys','assay','strat','geology','watertable']
+        for n in range(1,len(input_parameters)+1):
+            for i in combinations(input_parameters,n):
+                test = {j:getattr(self, j) for j in i}                
+                dh = Drillhole(
+                    "a",
+                    10,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,*test)
+
+    def test_MakeDrillholeStratSingular(self):
         dh = Drillhole(
             "a",
             10,
@@ -38,14 +61,14 @@ class TestDrillhole(unittest.TestCase):
             0,
             0,
             survey=self.survey,
-            strat=self.strat,
+            strat=self.strat.iloc[1:],
             assay=self.assay,
         )
 
     def test_DesurveyMethodWithSurvey(self):
-        '''
-        test desurveying when there is a survey        
-        '''
+        """
+        test desurveying when there is a survey
+        """
 
         for i in self.desurvey_method:
             dh = Drillhole(
@@ -62,10 +85,11 @@ class TestDrillhole(unittest.TestCase):
                 assay=self.assay,
                 desurvey_method=i,
             )
+
     def test_DesurveyMethodWithoutSurvey(self):
-        '''
-        test desurveying when there is no survey        
-        '''
+        """
+        test desurveying when there is no survey
+        """
 
         for i in self.desurvey_method:
             dh = Drillhole(
@@ -83,9 +107,9 @@ class TestDrillhole(unittest.TestCase):
             )
 
     def test_DesurveyMethodWithSurveySingleObs(self):
-        '''
-        test desurveying when the survey table is a single item        
-        '''
+        """
+        test desurveying when the survey table is a single item
+        """
 
         for i in self.desurvey_method:
             dh = Drillhole(
@@ -118,19 +142,21 @@ class TestDrillhole(unittest.TestCase):
             assay=self.assay,
             strat_simplify={"strat": {"b": "a"}},
         )
+
     def test_TriggerDepthError(self):
         with self.assertRaises(ValueError):
-            Drillhole('a',-10,1,1,1,1,1)
+            Drillhole("a", -10, 1, 1, 1, 1, 1)
 
     def test_TriggerAziError(self):
         with self.assertRaises(ValueError):
-            Drillhole('a',10,-1,10,1,1,1)
+            Drillhole("a", 10, -1, 10, 1, 1, 1)
 
     def test_TriggerIncError(self):
         with self.assertRaises(ValueError):
-            Drillhole('a',10,1,-10,1,1,1)
+            Drillhole("a", 10, 1, -10, 1, 1, 1)
+
     def test_EmptyDF(self):
-        Drillhole('a',10,1,10,1,1,1,survey=pd.DataFrame())
+        Drillhole("a", 10, 1, 10, 1, 1, 1, survey=pd.DataFrame())
 
 
 if __name__ == "__main__":

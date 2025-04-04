@@ -165,7 +165,7 @@ class Drillhole:
         """
         ensure that the survey dataframe contains depth, inclination and azimuth columns
         """
-        if isinstance(self.survey, pd.DataFrame):
+        if isinstance(self.survey, PointData):
             # survey columns
             self.survey = PointData(
                 self.survey, extra_validation_columns=["inclination", "azimuth"]
@@ -180,7 +180,7 @@ class Drillhole:
         code into a single interval
 
         """
-        if isinstance(self.strat, pd.DataFrame):
+        if isinstance(self.strat, IntervalData):
             if self.strat.shape[0] > 1:
                 tmpstrat = IntervalData(
                     self.strat, extra_validation_columns=["strat"]
@@ -209,8 +209,7 @@ class Drillhole:
         """
 
     def _calculate_inside(self):
-        val = self.strat.mid_point
-        # val = self._mid_point(self.strat["depthfrom"], self.strat["depthto"]).values
+        val = self.strat.midpoint
         strat = self.strat["strat"].values
         n_items = len(val)
         if n_items > 1:
@@ -264,7 +263,7 @@ class Drillhole:
 
     def create_vtk(self):
         """
-        creates the vtk drillhole datasets
+        creates the vtk drillhole datasets, from the tables 
         """
 
         fx, fy, fz = self._interp_survey_depth(self.strat["depthfrom"])
@@ -324,7 +323,7 @@ class Drillhole:
 
     def _check_geophysics(self):
         """
-        only currently converts from point to interval data
+        only converts from point to interval data
         """
         self.geophysics = self.geophysics.to_interval()
 
@@ -334,6 +333,8 @@ class Drillhole:
         """
         # special case of the dip starting at 180 exactly meaning that the hole is going straight up
         # we handle this by setting the dip to 179.99999 avoid the errors probably this is acceptable.
+        # the other probably better way is to have negative depths so that a vertical hole goes up
+        # but that has a lot of downstream issues as you have to flip a heap of parameter.
         if isinstance(dip, (float, int)):
             dip = self.__magic_dip
         else:
@@ -440,7 +441,6 @@ class Drillhole:
         self._check_survey()
         self._desurvey()
         self._check_assay()
-        self._check_survey()
         self._desurvey_assays()
         self._check_stratigraphy()
         self._create_contacts()

@@ -169,7 +169,7 @@ class IntervalData(pd.DataFrame):
             )
             tmp_agg.rename(columns={"fr": "depthfrom", "to": "depthto"}, inplace=True)
             tmp_agg.reset_index(drop=True, inplace=True)
-
+            tmp_agg = IntervalData(tmp_agg)
         return tmp_agg
 
     def _simplify(self, column_map):
