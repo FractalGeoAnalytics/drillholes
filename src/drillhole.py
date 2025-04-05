@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from typing import Union, Literal, Any
 from datetime import datetime
 from geodata import PointData, IntervalData
+import pyvista as pv
 
 DFNone = Union[pd.DataFrame, None]
 from tqdm import tqdm
@@ -246,7 +247,9 @@ class Drillhole:
             # copy the bottom and create a new table tmp_c aka contacts
             tmp_c = tmp_b.copy()
 
-            tmp_c["strat"] = tmp_b["strat"] + "-" + tmp_t["strat"]
+            tmp_c["strat"] = (
+                tmp_b["strat"].astype(str) + "-" + tmp_t["strat"].astype(str)
+            )
             tmp_c["type"] = "contact"
             conformables = pd.concat([tmp_b, tmp_t, tmp_c]).reset_index(drop=True)
             self._contacts = conformables
@@ -254,25 +257,40 @@ class Drillhole:
 
     def _interp_survey_depth(self, depth):
         """
-        interpolates uses the depth of an object to interpolate it's desurveyed position
+        uses the depth of an object to interpolate it's desurveyed position
         """
         x: np.ndarray = np.interp(depth, self.survey_depth, self.x)
         y: np.ndarray = np.interp(depth, self.survey_depth, self.y)
         z: np.ndarray = np.interp(depth, self.survey_depth, self.z)
         return x, y, z
 
-    def create_vtk(self):
+    def _interval_vtk_generator(self, table):
         """
-        creates the vtk drillhole datasets, from the tables 
+        creates intervals data to pass to vtk
         """
-
-        fx, fy, fz = self._interp_survey_depth(self.strat["depthfrom"])
-        tx, ty, tz = self._interp_survey_depth(self.strat["depthto"])
+        fx, fy, fz = self._interp_survey_depth(table["depthfrom"])
+        tx, ty, tz = self._interp_survey_depth(table["depthto"])
         f = np.vstack((fx, fy, fz)).T
         t = np.vstack((tx, ty, tz)).T
         xyz = np.hstack([f, t]).reshape(-1, 3)
-        strat = self.strat["strat"].repeat(2).to_list()
-        return xyz, strat
+        # look for all the extra columns and return them
+        outcolumns = table.columns[~table.columns.isin(["depthfrom", "depthto"])]
+        intervals = table[outcolumns].apply(np.repeat, axis=0, repeats=2)
+
+        return xyz, intervals
+
+    def create_vtk(self):
+        """
+        creates the vtk drillhole datasets for visualisation
+        specifically it generates lines that can be displayed correctly in paraview etc.
+        """
+        for i in self.type_map.keys():
+            if i != 'survey':
+                tmp = getattr(self, i)
+                if tmp is not None:
+                    xyz, intervals = self._interval_vtk_generator(tmp)
+
+        return xyz, intervals
 
     def _desurvey_strat(self):
         """
@@ -304,7 +322,7 @@ class Drillhole:
         """
         ensure that the assay dataframe contains from and to columns
         """
-        if isinstance(self.assay, pd.DataFrame):
+        if isinstance(self.assay, IntervalData):
             self.assay = IntervalData(self.assay)
 
     def _desurvey_assays(self):
@@ -389,9 +407,6 @@ class Drillhole:
         # magic number for vertical holes
         self.__magic_dip = 179.9999999
         # deep copy any dataframes that are used to prevent changes propagating.
-        # check hole depth
-        if self.depth <= 0:
-            raise ValueError("Hole Depth must be >0")
         # need to do data type conversion here to simplify
         # the processing later on
         type_map = {
@@ -402,6 +417,7 @@ class Drillhole:
             "geophysics": PointData,
             "watertable": PointData,
         }
+        self.type_map = type_map
         for i in type_map:
             tmp = getattr(self, i)
             if isinstance(tmp, pd.DataFrame):
@@ -427,16 +443,19 @@ class Drillhole:
         for i in python_basetypes:
             tmp = self.__convert_pd_to_pythontypes(getattr(self, i), i)
             setattr(self, i, tmp)
-        # check dip and azi
-        self._validate_dipazi(self.inclination, self.azimuth)
         if self.positive_down:
             self.inclination = 90 + self.inclination
             if isinstance(self.survey, pd.DataFrame):
                 self.survey.inclination = self._dip_check(90 + self.survey.inclination)
+        # check dip and azi
+        self._validate_dipazi(self.inclination, self.azimuth)
 
         self.inclination = self._dip_check(self.inclination)
         if isinstance(self.survey, pd.DataFrame):
             self.inclination = self._dip_check(self.survey.inclination)
+        # check hole depth
+        if self.depth <= 0:
+            raise ValueError("Hole Depth must be >0")
 
         self._check_survey()
         self._desurvey()
@@ -470,7 +489,7 @@ class DrillData:
     lith: pd.DataFrame
     stratcolumn = None
     wireline: pd.DataFrame
-    desurvey_method: Literal[
+    desurvey_method: Literal[   
         "mininum_curvature",
         "radius_curvature",
         "average_tangent",
