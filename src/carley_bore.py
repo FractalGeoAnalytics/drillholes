@@ -180,7 +180,8 @@ for i in [assay, lith, scint, collar, color, grain, alter, strat, pxrf]:
 from importlib import reload
 
 reload(drillhole)
-self = drillhole.DrillData(collar, strat=strat, assay=assay, negative_down=False)
+self = drillhole.DrillData(collar, strat=strat, assay=assay, negative_down=True)
+
 mb = self.to_vtk()
 mbvtks = pv.merge(mb["strat"])
 p = pv.Plotter()

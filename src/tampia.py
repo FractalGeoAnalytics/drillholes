@@ -1,6 +1,3 @@
-
-
-
 import math
 import shutil
 from importlib import reload
@@ -238,13 +235,13 @@ for i in tqdm(results["collars"].HOLEID.unique()):
     tmp_strat = tmp_geol.iloc[:,:4].copy().rename(columns={'Lithology':'strat'})
     # assume that last OB material OB to there
 
-    tmp_strat.replace(simp_strat,inplace=True)
+    #tmp_strat.replace(simp_strat,inplace=True)
     whereob = np.where(tmp_strat.strat == 'OB')
     if len(whereob[0])>0:
         tmp_strat.loc[0:whereob[0].max(),'strat'] = 'OB'
     
     # simplify the overburden materials
-    tmpdh = Drillhole(i,tmp_col.depth, 30,300,tmp_col.easting,tmp_col.northing, tmp_col.elevation,assay=tmp_ass,geology=tmp_geol,survey=tmp_surv,strat=tmp_strat,geophysics=tmp_geop,struct=tmp_struct,strat_simplify=simp_strat)
+    tmpdh = Drillhole(i,tmp_col.depth, 30,300,tmp_col.easting,tmp_col.northing, tmp_col.elevation,assay=tmp_ass,geology=tmp_geol,survey=tmp_surv,strat=tmp_strat,geophysics=tmp_geop,struct=tmp_struct)
     dhs.update({i:tmpdh})
 
     tdata = tmpdh.create_vtk()
@@ -584,7 +581,7 @@ p.show()
 
 ufeat = ctmp.feature_name.unique()
 for u in ufeat:
-dmat = cdist(tmp_feat[xyzn],tmp_feat[xyzn])
+    dmat = cdist(tmp_feat[xyzn],tmp_feat[xyzn])
 # masking do adjacency matrix
 
 np.isfinite(dmat).sum()
