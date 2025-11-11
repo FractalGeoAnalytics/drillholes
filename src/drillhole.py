@@ -92,7 +92,7 @@ class Drillhole:
     geophysics: DFNone = None
     struct: DFNone = None
     watertable: Union[float, None] = None
-    negative_down = (False,)
+    negative_down:bool = False
     display_resolution: float = 0.1
     desurvey_method: Literal[
         "mininum_curvature",
@@ -628,6 +628,7 @@ class DrillData:
                 tmp_collar.northing.item(),
                 tmp_collar.elevation,
                 **tmp_tables,
+                negative_down=self.negative_down,
             )
             tmp._contacts
             drillholes.append(tmp)
