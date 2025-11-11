@@ -170,3 +170,9 @@ cython_debug/
 # PyPI configuration file
 .pypirc
 data
+geology
+assay
+strat
+watertable
+geophysics
+vtk
