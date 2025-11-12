@@ -630,7 +630,6 @@ class DrillData:
                 **tmp_tables,
                 negative_down=self.negative_down,
             )
-            tmp._contacts
             drillholes.append(tmp)
         self.drillholes = drillholes
 
