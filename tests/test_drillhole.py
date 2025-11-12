@@ -1,5 +1,5 @@
 import unittest
-from src.drillhole import Drillhole
+from src.drillholes.drillhole import Drillhole
 
 import pandas as pd
 import numpy as np

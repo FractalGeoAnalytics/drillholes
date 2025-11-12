@@ -1,6 +1,6 @@
 import unittest
 
-from geodata import PointData
+from drillholes.geodata import PointData
 
 import pandas as pd
 import numpy as np

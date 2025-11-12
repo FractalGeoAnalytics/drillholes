@@ -1,6 +1,6 @@
 import unittest
 
-from geodata import IntervalData
+from drillholes.geodata import IntervalData
 
 import pandas as pd
 import numpy as np

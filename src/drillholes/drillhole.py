@@ -4,9 +4,9 @@ import numpy as np
 import wellpathpy as wp
 from dataclasses import dataclass, field
 from typing import Union, Literal, Any
-from geodata import PointData, IntervalData
+from drillholes.geodata import PointData, IntervalData
 import pyvista as pv
-from dipconversion import strikedip2vector
+from drillholes.dipconversion import strikedip2vector
 
 DFNone = Union[pd.DataFrame, None]
 from tqdm import tqdm

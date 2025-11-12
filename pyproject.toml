@@ -1,6 +1,6 @@
 [project]
 name = "drillholes"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
     "pandas",
     'importlib-metadata; python_version<"3.10"',
@@ -10,6 +10,7 @@ dependencies = [
     "dhcomp",
     "pyvista"
 ]
+
 [build-system]
 requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
