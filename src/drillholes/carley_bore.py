@@ -10,8 +10,8 @@ import numpy as np
 from augeosciencedatasets import downloaders, readers
 import pandas as pd
 from matplotlib import pyplot as plt
-from drillhole import Drillhole, DrillData
-import drillhole
+from drillholes.drillhole import Drillhole, DrillData
+from drillholes import drillhole
 from importlib import reload
 reload(drillhole)
 outpath = Path("data/ASDCarleyBore")
