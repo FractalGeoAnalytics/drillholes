@@ -1,6 +1,6 @@
 [project]
 name = "drillholes"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
     "pandas",
     'importlib-metadata; python_version<"3.10"',
