@@ -1,5 +1,5 @@
 import unittest
-from src.drillholes.drillhole import Drillhole
+from src.drillholes.drillhole import Drillhole, DrillData
 
 import pandas as pd
 import numpy as np
@@ -20,7 +20,32 @@ class TestDrillhole(unittest.TestCase):
         self.strat = pd.DataFrame(
             {"depthfrom": [0, 9], "depthto": [9, 10], "strat": ["a", "b"]}
         )
-        self.survey = pd.DataFrame({'depth': {0: 0.0, 1: 10.0, 2: 20.0, 3: 30.0, 4: 40.0, 5: 50.0, 6: 59.0}, 'azimuth': {0: 304.11, 1: 303.01, 2: 302.72, 3: 300.45, 4: 300.6, 5: 299.36, 6: 298.38}, 'inclination': {0: 29.32, 1: 29.25, 2: 29.009999999999998, 3: 28.409999999999997, 4: 27.299999999999997, 5: 26.299999999999997, 6: 90-25.599999999999994}})
+        self.survey = pd.DataFrame(
+            {
+                "depth": {0: 0.0, 1: 10.0, 2: 20.0, 3: 30.0, 4: 40.0, 5: 50.0, 6: 59.0},
+                "azimuth": {
+                    0: 304.11,
+                    1: 303.01,
+                    2: 302.72,
+                    3: 300.45,
+                    4: 300.6,
+                    5: 299.36,
+                    6: 298.38,
+                },
+                "inclination": {
+                    0: 29.32,
+                    1: 29.25,
+                    2: 29.009999999999998,
+                    3: 28.409999999999997,
+                    4: 27.299999999999997,
+                    5: 26.299999999999997,
+                    6: 90 - 25.599999999999994,
+                },
+            }
+        )
+        self.struct = pd.DataFrame(
+            {"depth": [3, 4], "dip": [0, 1], "dipdirection": [90, 80]}
+        )
         self.geophys = pd.DataFrame({"depth": [0, 1, 2], "geophys": [1, 2, 3]})
 
         self.geology = pd.DataFrame(
@@ -35,6 +60,17 @@ class TestDrillhole(unittest.TestCase):
             "high_tangent",
             "low_tangent",
         ]
+        self.collar = pd.DataFrame(
+            {
+                "holeid": ["a", "b"],
+                "depth": [1, 2],
+                "inclination": [-90, -89],
+                "azimuth": [0, 0],
+                "easting": [1, 2],
+                "northing": [1, 2],
+                "elevation": [2, 3],
+            }
+        )
 
     def test_MakeDrillholeDataFrameInputsPermuter(self):
 
@@ -151,7 +187,7 @@ class TestDrillhole(unittest.TestCase):
             Drillhole("a", 10, 99, 10, 1, 1, 1, negative_down=True)
 
     def test_AziOKPosDown(self):
-        for i in range(0,91):
+        for i in range(0, 91):
             Drillhole("a", 10, i, 10, 1, 1, 1, negative_down=False)
 
     def test_AziOKPosUp(self):
@@ -159,10 +195,67 @@ class TestDrillhole(unittest.TestCase):
 
     def test_EmptyDF(self):
         Drillhole("a", 10, 1, 10, 1, 1, 1, survey=pd.DataFrame())
-    
+
+    def test_ExtendSurvey(self):
+        Drillhole("a", 1000, 1, 10, 1, 1, 1, survey=self.survey)
+
     def test_NegFail(self):
-        Drillhole("a", 10, 1, 10, 1, 1, 1, survey=self.survey, negative_down=False)
-    
+
+        with self.assertRaises(ValueError):
+            Drillhole(
+                "a", 10, -90, 10, 1, 1, 1, survey=self.survey, negative_down=False
+            )
+
+    def test_CreateVTK(self):
+        dh = Drillhole("a", 10, 1, 10, 1, 1, 1, survey=self.survey, negative_down=False)
+        dh.create_vtk()
+
+    def test_ExtractVTK(self):
+        dh = Drillhole(
+            "a",
+            10,
+            1,
+            10,
+            1,
+            1,
+            1,
+            survey=self.survey,
+            assay=self.assay,
+            geophysics=self.geophys,
+            negative_down=False,
+        )
+        dh.extract_vtk_data()
+
+    def test_Structure(self):
+        dh = Drillhole(
+            "a",
+            10,
+            1,
+            10,
+            1,
+            1,
+            1,
+            survey=self.survey,
+            assay=self.assay,
+            struct=self.struct,
+            negative_down=False,
+        )
+        dh.create_vtk()
+
+    def test_Geophys(self):
+        dh = Drillhole(
+            "a", 10, 1, 10, 1, 1, 1, geophysics=self.geophys, negative_down=False
+        )
+
+    def test_Dip180(self):
+        dh = Drillhole(
+            "a", 10, 180, 0, 1, 1, 1, geophysics=self.geophys, negative_down=True
+        )
+
+    def test_DrillData(self):
+
+        dd = DrillData(self.collar)
+        dd.to_vtk()        
 
 if __name__ == "__main__":
     unittest.main()
