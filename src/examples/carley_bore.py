@@ -233,7 +233,7 @@ p.enable_fly_to_right_click()
 p.show()
 
 data = data[data['type'].isin(['inside','bottom'])]
-del gm
+
 gm = GeologicalModel(bounds[0, :], bounds[1, :])
 gm.data = data.drop(columns="type")
 # loopstructural the definition of stratigraphy is conformable units
