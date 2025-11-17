@@ -249,7 +249,7 @@ class TestDrillhole(unittest.TestCase):
 
     def test_Dip180(self):
         dh = Drillhole(
-            "a", 10, 180, 0, 1, 1, 1, geophysics=self.geophys, negative_down=True
+            "a", 10, 90, 0, 1, 1, 1, geophysics=self.geophys, negative_down=False
         )
 
     def test_DrillData(self):
