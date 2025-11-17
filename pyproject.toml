@@ -1,9 +1,10 @@
 [project]
 name = "drillholes"
 version = "0.0.2"
+description ="Desurvey Compositing, Visualisation of drillholes from collar, assay and survey files"
+readme = 'README.md'
 dependencies = [
     "pandas",
-    'importlib-metadata; python_version<"3.10"',
     "numpy",
     "wellpathpy",
     "tqdm",
